@@ -19,7 +19,8 @@ namespace AdlTransfer
         private static string _targetPath;
         private static string _accountName;
         private static string _userName;
-        private static SecureString _password = new SecureString();
+        private static SecureString _password;
+        private static string _tenantId;
         private static bool _isServicePrincipal;
         private static int _perFileThreadCount = 10;
         private static int _concurrentFileCount = 5;
@@ -108,7 +109,8 @@ namespace AdlTransfer
                 var optionSet = new OptionSet
                 {
                     {"u|user=", "The {name} of Azure Active Directory user\nor the client id of the Service Principal.", v => _userName = v},
-                    {"p|password=", "The {password} of Azure Active Directory user\nor the authentication key of the Service Principal.", v => { foreach (var c in v) _password.AppendChar(c); }},
+                    {"p|password=", "The {password} of Azure Active Directory user\nor the authentication key of the Service Principal.", v => _password = v.ToSecureString()},
+                    {"t|tenant=", "The {id} of Azure Active Directory tenant.", v => _tenantId = v},
                     {"i|spi|serviceprincipal", "Use an Azure Active Directory Service Principal to authenticate.\nFor more details how to create a Service Principal see https://azure.microsoft.com/en-us/documentation/articles/resource-group-authenticate-service-principal/", v => _isServicePrincipal = v != null},
 
                     {"f|filethreads=", "The maximum {count} of threads used to upload each file.", (int v) => _perFileThreadCount = v},
@@ -158,9 +160,9 @@ namespace AdlTransfer
                 //    return true;
                 //}
 
-                if (_isServicePrincipal && (string.IsNullOrEmpty(_userName) || _password.Length == 0))
+                if (_isServicePrincipal && (string.IsNullOrEmpty(_userName) || _password == null || _password.Length == 0 || string.IsNullOrEmpty(_tenantId)))
                 {
-                    Console.WriteLine("Please specify the client id and authentication key using the -u and -p options.");
+                    Console.WriteLine("Please specify the client id, tenant id and authentication key using the -u, -t and -p options.");
                     return true;
                 }
 
@@ -253,9 +255,14 @@ namespace AdlTransfer
             if (_userName != null && (_password != null || _isServicePrincipal))
                 account.Id = _userName;
 
+            var tenant = string.IsNullOrEmpty(_tenantId)
+                ? AuthenticationFactory.CommonAdTenant
+                : _tenantId;
+
             var env = AzureEnvironment.PublicEnvironments[EnvironmentName.AzureCloud];
+
             var authResult = authFactory.Authenticate(
-                account, env, AuthenticationFactory.CommonAdTenant, _password,
+                account, env, tenant, _password,
                 _isServicePrincipal ? ShowDialog.Never : ShowDialog.Auto);
 
             return new TokenCredentials(authResult.AccessToken);
