@@ -94,8 +94,9 @@ namespace AdlTransfer
             catch (Exception e)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine(e.Message);
+                Console.Error.WriteLine(e.Message);
                 Console.ResetColor();
+                Environment.ExitCode = -1;
             }
         }
 
@@ -150,19 +151,22 @@ namespace AdlTransfer
 
                 if (!_isDownload && !Directory.Exists(_sourcePath) && !File.Exists(_sourcePath))
                 {
-                    Console.WriteLine("The source file or folder does not exist.");
+                    Console.Error.WriteLine("The source file or folder does not exist.");
+                    Environment.ExitCode = -1;
                     return true;
                 }
 
                 //if (_isDownload && !Directory.Exists(_targetPath) && !File.Exists(_targetPath))
                 //{
-                //    Console.WriteLine("The target file or folder does not exist.");
+                //    Console.Error.WriteLine("The target file or folder does not exist.");
+                //    Environment.ExitCode = -1;
                 //    return true;
                 //}
 
                 if (_isServicePrincipal && (string.IsNullOrEmpty(_userName) || _password == null || _password.Length == 0 || string.IsNullOrEmpty(_tenantId)))
                 {
-                    Console.WriteLine("Please specify the client id, tenant id and authentication key using the -u, -t and -p options.");
+                    Console.Error.WriteLine("Please specify the client id, tenant id and authentication key using the -u, -t and -p options.");
+                    Environment.ExitCode = -1;
                     return true;
                 }
 
@@ -170,8 +174,9 @@ namespace AdlTransfer
             }
             catch (OptionException e)
             {
-                Console.WriteLine($"AdlTransfer: {e.Message}");
-                Console.WriteLine("Try `AdlTransfer --help' for more information.");
+                Console.Error.WriteLine($"AdlTransfer: {e.Message}");
+                Console.Error.WriteLine("Try `AdlTransfer --help' for more information.");
+                Environment.ExitCode = -1;
                 return true;
             }
         }
@@ -255,15 +260,22 @@ namespace AdlTransfer
             if (_userName != null && (_password != null || _isServicePrincipal))
                 account.Id = _userName;
 
+            var env = AzureEnvironment.PublicEnvironments[EnvironmentName.AzureCloud];
+
             var tenant = string.IsNullOrEmpty(_tenantId)
                 ? AuthenticationFactory.CommonAdTenant
                 : _tenantId;
 
-            var env = AzureEnvironment.PublicEnvironments[EnvironmentName.AzureCloud];
+            ShowDialog showDialog;
+            if (_isServicePrincipal)
+                showDialog = ShowDialog.Never;
+            else if (_userName != null && _password == null)
+                showDialog = ShowDialog.Always;
+            else
+                showDialog = ShowDialog.Auto;
 
             var authResult = authFactory.Authenticate(
-                account, env, tenant, _password,
-                _isServicePrincipal ? ShowDialog.Never : ShowDialog.Auto);
+                account, env, tenant, _password, showDialog);
 
             return new TokenCredentials(authResult.AccessToken);
         }
